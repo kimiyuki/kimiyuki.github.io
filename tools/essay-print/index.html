@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A4エッセイ印刷</title>
+  <style>
+    @page { size: A4 portrait; margin: 17mm 19mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #202020; background: #f1f1ef; }
+    main { width: min(100%, 210mm); margin: 20px auto; padding: 17mm 19mm; background: white;
+           font: 11.5pt/1.43 Georgia, "Times New Roman", serif; }
+    h1 { margin: 0 0 13px; font-size: 32pt; line-height: 1.08; overflow-wrap: anywhere;
+         break-after: avoid; }
+    .byline { margin: 9px 0 19px; padding-bottom: 13px; border-bottom: 1px solid #777;
+              font: 10pt/1.4 system-ui, sans-serif; break-after: avoid; }
+    form { border: 1px solid #bbb; padding: 14px; margin: 0 0 20px;
+           font: 14px/1.5 system-ui, sans-serif; }
+    label { display: block; margin-top: 9px; }
+    label:first-child { margin-top: 0; }
+    input, textarea { display: block; width: 100%; padding: 8px; font: inherit; }
+    textarea { min-height: 9em; resize: vertical; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    button { padding: 6px 14px; font: inherit; }
+    .print { color: white; background: #273739; border: 1px solid #273739; }
+    button:disabled { opacity: 0.55; }
+    article p { margin: 0 0 0.72em; orphans: 2; widows: 2; overflow-wrap: anywhere; }
+    footer { margin-top: 15px; padding-top: 8px; border-top: 1px solid #aaa;
+             font: 8.5pt/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
+    a { color: inherit; }
+    @media screen and (max-width: 600px) {
+      main { margin: 0 auto; padding: 20px; }
+    }
+    @media print {
+      body { background: white; }
+      main { width: auto; margin: 0; padding: 0; }
+      form { display: none; }
+      footer a { text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <form>
+      <label for="title-input">タイトル</label>
+      <input id="title-input" type="text">
+
+      <label for="byline-input">著者・発表日（任意）</label>
+      <input id="byline-input" type="text" value="Paul Graham">
+
+      <label for="source-input">出典URL（任意）</label>
+      <input id="source-input" type="url" placeholder="https://www.paulgraham.com/…">
+
+      <label for="body-input">本文</label>
+      <textarea id="body-input" placeholder="タイトルごと貼り付けることもできます"></textarea>
+
+      <div class="actions">
+        <button id="take-title" type="button" disabled>先頭行をタイトルにする</button>
+        <button class="print" id="print" type="button" disabled>印刷する</button>
+      </div>
+    </form>
+
+    <div id="preview" lang="en" hidden>
+      <h1 id="essay-title" hidden></h1>
+      <p class="byline" id="essay-byline" hidden></p>
+      <article></article>
+      <footer hidden><a></a></footer>
+    </div>
+  </main>
+
+  <script>
+    const form = document.querySelector('form');
+    const titleInput = document.querySelector('#title-input');
+    const bylineInput = document.querySelector('#byline-input');
+    const sourceInput = document.querySelector('#source-input');
+    const bodyInput = document.querySelector('#body-input');
+    const takeTitleButton = document.querySelector('#take-title');
+    const printButton = document.querySelector('#print');
+    const preview = document.querySelector('#preview');
+    const essayTitle = document.querySelector('#essay-title');
+    const essayByline = document.querySelector('#essay-byline');
+    const article = document.querySelector('article');
+    const footer = document.querySelector('footer');
+    const sourceLink = footer.querySelector('a');
+
+    function splitFirstLine(text) {
+      const firstLineEnd = text.indexOf('\n');
+      if (firstLineEnd === -1) return [text, ''];
+      return [text.slice(0, firstLineEnd).trim(), text.slice(firstLineEnd + 1).trim()];
+    }
+
+    function splitLongParagraph(paragraph) {
+      if (paragraph.length < 700) return [paragraph];
+
+      const clauses = paragraph.match(/[^;]*;|[^;]+$/g) ?? [paragraph];
+      if (clauses.length < 4) return [paragraph];
+
+      const groups = [];
+      let group = '';
+      let remainingLength = paragraph.length;
+      for (const clause of clauses) {
+        group += clause;
+        remainingLength -= clause.length;
+        if (group.length >= 380 && remainingLength >= 160) {
+          groups.push(group.trim());
+          group = '';
+        }
+      }
+      if (group.trim()) groups.push(group.trim());
+      return groups;
+    }
+
+    function updateSource() {
+      const source = sourceInput.value.trim();
+      let url;
+      try {
+        url = new URL(source);
+      } catch {
+        // The footer stays hidden until the source is a complete web URL.
+      }
+
+      const valid = url?.protocol === 'https:' || url?.protocol === 'http:';
+      footer.hidden = !valid;
+      if (valid) {
+        sourceLink.href = url.href;
+        sourceLink.textContent = source;
+      } else {
+        sourceLink.removeAttribute('href');
+        sourceLink.textContent = '';
+      }
+    }
+
+    function render() {
+      const title = titleInput.value.trim();
+      const byline = bylineInput.value.trim();
+      const text = bodyInput.value.trim();
+      const [, rest] = splitFirstLine(text);
+      const paragraphs = text ? text.split(/\n\s*\n/).flatMap(splitLongParagraph) : [];
+
+      essayTitle.textContent = title;
+      essayTitle.hidden = !title;
+      essayByline.textContent = byline;
+      essayByline.hidden = !byline;
+      document.title = title || 'A4エッセイ印刷';
+
+      article.replaceChildren(...paragraphs.map(text => {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = text;
+        return paragraph;
+      }));
+
+      updateSource();
+      preview.hidden = !text;
+      takeTitleButton.disabled = !rest || Boolean(title);
+      printButton.disabled = !text;
+    }
+
+    form.addEventListener('input', render);
+    form.addEventListener('submit', event => event.preventDefault());
+
+    takeTitleButton.addEventListener('click', () => {
+      const [firstLine, rest] = splitFirstLine(bodyInput.value.trim());
+      if (!rest || titleInput.value.trim()) return;
+      titleInput.value = firstLine;
+      bodyInput.value = rest;
+      render();
+      titleInput.focus();
+    });
+
+    printButton.addEventListener('click', () => window.print());
+    render();
+  </script>
+</body>
+</html>
